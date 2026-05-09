@@ -1,80 +1,226 @@
-name: Build APK
+name: Build Rose APK
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    
     steps:
-    - uses: actions/setup-java@v4
+    - name: Setup Java 17
+      uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Install SDK
+    - name: Setup Android SDK
       run: |
-        export ANDROID_HOME=$HOME/sdk
+        export ANDROID_HOME=$HOME/android-sdk
         mkdir -p $ANDROID_HOME/cmdline-tools
         cd $ANDROID_HOME/cmdline-tools
-        curl -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o sdk.zip
-        unzip -q sdk.zip && mv cmdline-tools latest && rm sdk.zip
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip
+        mv cmdline-tools latest
+        rm commandlinetools-linux-11076708_latest.zip
         echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
         echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1
 
-    - name: Create App
+    - name: Create Project Structure
       run: |
-        mkdir -p app/src/main/java/com/test app/src/main/res/layout app/src/main/res/values gradle/wrapper
+        mkdir -p app/src/main/java/com/rose/app
+        mkdir -p app/src/main/res/layout
+        mkdir -p app/src/main/res/xml
+        mkdir -p app/src/main/res/values
+        mkdir -p gradle/wrapper
 
-        echo 'rootProject.name="TestApp";include ":app"' > settings.gradle
-        echo 'plugins{id"com.android.application"version"8.2.2"apply false}' > build.gradle
-        echo 'android.useAndroidX=true' > gradle.properties
-        echo "sdk.dir=$HOME/sdk" > local.properties
+    - name: Create settings.gradle
+      run: |
+        cat > settings.gradle << 'EOF'
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "RoseApp"
+        include ':app'
+        EOF
 
+    - name: Create root build.gradle
+      run: |
+        cat > build.gradle << 'EOF'
+        plugins {
+            id 'com.android.application' version '8.2.2' apply false
+        }
+        EOF
+
+    - name: Create gradle.properties
+      run: |
+        cat > gradle.properties << 'EOF'
+        org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+        android.useAndroidX=true
+        android.enableJetifier=true
+        EOF
+
+    - name: Create local.properties
+      run: echo "sdk.dir=$HOME/android-sdk" > local.properties
+
+    - name: Create app/build.gradle
+      run: |
         cat > app/build.gradle << 'EOF'
-        plugins{id'com.android.application'}
-        android{namespace'com.test';compileSdk 34;defaultConfig{applicationId"com.test";minSdk 24;targetSdk 34;versionCode 1;versionName"1.0"}}
+        plugins {
+            id 'com.android.application'
+        }
+        android {
+            namespace 'com.rose.app'
+            compileSdk 34
+            defaultConfig {
+                applicationId "com.rose.app"
+                minSdk 24
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+            buildTypes {
+                release {
+                    minifyEnabled false
+                }
+            }
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_1_8
+                targetCompatibility JavaVersion.VERSION_1_8
+            }
+        }
+        dependencies {
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+            implementation 'com.google.android.material:material:1.11.0'
+            implementation 'androidx.recyclerview:recyclerview:1.3.1'
+        }
         EOF
 
+    - name: Create AndroidManifest.xml
+      run: |
         cat > app/src/main/AndroidManifest.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-        <application android:label="GitHub Test">
-        <activity android:name=".MainActivity" android:exported="true">
-        <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-        </activity></application></manifest>
+            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+            <application
+                android:allowBackup="true"
+                android:label="Rose"
+                android:theme="@style/Theme.Rose">
+                <activity android:name=".LockScreenActivity" android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+                <activity android:name=".MainActivity" />
+            </application>
+        </manifest>
         EOF
 
-        cat > app/src/main/java/com/test/MainActivity.java << 'EOF'
-        package com.test;
+    - name: Create Java Files
+      run: |
+        cat > app/src/main/java/com/rose/app/LockScreenActivity.java << 'EOF'
+        package com.rose.app;
+        import android.content.Intent;
+        import android.os.Bundle;
+        import android.widget.EditText;
+        import android.widget.Toast;
+        import androidx.appcompat.app.AppCompatActivity;
+        public class LockScreenActivity extends AppCompatActivity {
+            @Override
+            protected void onCreate(Bundle b) {
+                super.onCreate(b);
+                setContentView(R.layout.activity_lock_screen);
+                EditText p = findViewById(R.id.pinEditText);
+                findViewById(R.id.unlockButton).setOnClickListener(v -> {
+                    if (p.getText().toString().equals("1231")) {
+                        startActivity(new Intent(this, MainActivity.class));
+                        finish();
+                    } else Toast.makeText(this, "خطأ", Toast.LENGTH_SHORT).show();
+                });
+            }
+        }
+        EOF
+
+        cat > app/src/main/java/com/rose/app/MainActivity.java << 'EOF'
+        package com.rose.app;
         import android.app.Activity;
         import android.os.Bundle;
-        import android.widget.LinearLayout;
         import android.widget.TextView;
         import android.graphics.Color;
         public class MainActivity extends Activity {
             protected void onCreate(Bundle b) {
                 super.onCreate(b);
-                LinearLayout l = new LinearLayout(this);
-                l.setBackgroundColor(Color.parseColor("#1a1a2e"));
-                l.setGravity(17);
                 TextView t = new TextView(this);
-                t.setText("✅ شغال من GitHub!");
+                t.setText("✅ Rose - شغال!");
                 t.setTextColor(Color.WHITE);
-                t.setTextSize(28);
-                l.addView(t);
-                setContentView(l);
+                t.setTextSize(30);
+                t.setBackgroundColor(Color.parseColor("#1C1C1E"));
+                t.setGravity(17);
+                setContentView(t);
             }
         }
         EOF
 
-    - name: Build APK
+    - name: Create Layouts
       run: |
-        gradle wrapper
+        cat > app/src/main/res/layout/activity_lock_screen.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:layout_width="match_parent" android:layout_height="match_parent"
+            android:gravity="center" android:orientation="vertical" android:background="#1C1C1E">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="🌹" android:textSize="64sp"/>
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:text="Rose" android:textColor="#FFFFFF"
+                android:textSize="28sp" android:textStyle="bold"/>
+            <EditText android:id="@+id/pinEditText" android:layout_width="200dp"
+                android:layout_height="wrap_content" android:layout_marginTop="40dp"
+                android:inputType="numberPassword" android:textColor="#FFFFFF"
+                android:hint="PIN" android:maxLength="4" android:gravity="center"/>
+            <Button android:id="@+id/unlockButton" android:layout_width="200dp"
+                android:layout_height="48dp" android:layout_marginTop="20dp"
+                android:text="فتح" android:backgroundTint="#007AFF" android:textColor="#FFFFFF"/>
+        </LinearLayout>
+        EOF
+
+    - name: Create Theme
+      run: |
+        cat > app/src/main/res/values/themes.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <style name="Theme.Rose" parent="Theme.AppCompat.Light.NoActionBar">
+                <item name="android:statusBarColor">#1C1C1E</item>
+                <item name="android:windowBackground">#000000</item>
+            </style>
+        </resources>
+        EOF
+
+    - name: Generate Gradle Wrapper and Build
+      run: |
+        gradle wrapper --gradle-version 8.5
         ./gradlew assembleDebug --no-daemon
 
-    - name: Download APK
-      uses: actions/upload-artifact@v4
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
       with:
-        name: Test-APK
+        name: Rose-APK
         path: app/build/outputs/apk/debug/app-debug.apk
