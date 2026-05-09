@@ -14,10 +14,20 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      with:
-        packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+    - name: Setup Android SDK Manually
+      run: |
+        mkdir -p $HOME/android-sdk/cmdline-tools
+        cd $HOME/android-sdk/cmdline-tools
+        curl -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o sdk.zip
+        unzip -q sdk.zip
+        mv cmdline-tools latest
+        rm sdk.zip
+        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+        echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+        yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
     - name: Create Project Structure
       run: |
@@ -65,8 +75,7 @@ jobs:
         EOF
 
     - name: Create local.properties
-      run: |
-        echo "sdk.dir=$ANDROID_HOME" > local.properties
+      run: echo "sdk.dir=$HOME/android-sdk" > local.properties
 
     - name: Create app/build.gradle
       run: |
@@ -108,8 +117,6 @@ jobs:
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
             <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-            <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-            <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
             <application
                 android:allowBackup="true"
                 android:icon="@mipmap/ic_launcher"
@@ -133,13 +140,12 @@ jobs:
         </manifest>
         EOF
 
-    - name: Create Java Files
+    - name: Create LockScreenActivity.java
       run: |
         cat > app/src/main/java/com/rose/app/LockScreenActivity.java << 'EOF'
         package com.rose.app;
         import android.content.Intent;
         import android.os.Bundle;
-        import android.widget.Button;
         import android.widget.EditText;
         import android.widget.Toast;
         import androidx.appcompat.app.AppCompatActivity;
@@ -161,23 +167,23 @@ jobs:
         }
         EOF
 
+    - name: Create FileItem.java
+      run: |
         cat > app/src/main/java/com/rose/app/FileItem.java << 'EOF'
         package com.rose.app;
         import java.util.Date;
         public class FileItem {
             private final String displayName, filePath;
             private final Date date;
-            public FileItem(String displayName, String filePath, Date date) {
-                this.displayName = displayName;
-                this.filePath = filePath;
-                this.date = date;
-            }
+            public FileItem(String dn, String fp, Date d) { displayName=dn; filePath=fp; date=d; }
             public String getDisplayName() { return displayName; }
             public String getFilePath() { return filePath; }
             public Date getDate() { return date; }
         }
         EOF
 
+    - name: Create CryptoUtils.java
+      run: |
         cat > app/src/main/java/com/rose/app/CryptoUtils.java << 'EOF'
         package com.rose.app;
         import android.content.Context;
@@ -242,6 +248,8 @@ jobs:
         }
         EOF
 
+    - name: Create MainActivity.java
+      run: |
         cat > app/src/main/java/com/rose/app/MainActivity.java << 'EOF'
         package com.rose.app;
         import android.content.Intent;
@@ -283,16 +291,13 @@ jobs:
             }
             private void open(String type) {
                 Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-                i.setType(type);
-                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType(type); i.addCategory(Intent.CATEGORY_OPENABLE);
                 startActivityForResult(Intent.createChooser(i, "اختر ملف"), 100);
             }
             @Override
             protected void onActivityResult(int req, int res, Intent data) {
                 super.onActivityResult(req, res, data);
-                if (req == 100 && res == RESULT_OK && data != null && data.getData() != null) {
-                    save(data.getData());
-                }
+                if (req == 100 && res == RESULT_OK && data != null && data.getData() != null) save(data.getData());
             }
             private void save(Uri uri) {
                 try {
@@ -305,7 +310,7 @@ jobs:
                     list.add(0, new FileItem(name, f.getAbsolutePath(), new Date()));
                     adapter.notifyItemInserted(0);
                     rv.scrollToPosition(0);
-                    Toast.makeText(this, "تم التشفير ✓", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "تم ✓", Toast.LENGTH_SHORT).show();
                 } catch (Exception e) {
                     Toast.makeText(this, "خطأ", Toast.LENGTH_SHORT).show();
                 }
@@ -348,43 +353,37 @@ jobs:
       run: |
         cat > app/src/main/res/layout/activity_lock_screen.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
-        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-            android:layout_width="match_parent" android:layout_height="match_parent"
-            android:gravity="center" android:orientation="vertical" android:background="#1C1C1E">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🌹" android:textSize="64sp" />
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Rose" android:textColor="#FFFFFF" android:textSize="32sp" android:textStyle="bold" />
-            <EditText android:id="@+id/pinEditText" android:layout_width="200dp" android:layout_height="wrap_content" android:layout_marginTop="40dp" android:inputType="numberPassword" android:textColor="#FFFFFF" android:hint="PIN" android:maxLength="4" android:gravity="center" />
-            <Button android:id="@+id/unlockButton" android:layout_width="200dp" android:layout_height="48dp" android:layout_marginTop="20dp" android:text="فتح" android:backgroundTint="#007AFF" android:textColor="#FFFFFF" />
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:background="#1C1C1E">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🌹" android:textSize="64sp"/>
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Rose" android:textColor="#FFFFFF" android:textSize="28sp" android:textStyle="bold"/>
+        <EditText android:id="@+id/pinEditText" android:layout_width="200dp" android:layout_height="wrap_content" android:layout_marginTop="40dp" android:inputType="numberPassword" android:textColor="#FFFFFF" android:hint="PIN" android:maxLength="4" android:gravity="center"/>
+        <Button android:id="@+id/unlockButton" android:layout_width="200dp" android:layout_height="48dp" android:layout_marginTop="20dp" android:text="فتح" android:backgroundTint="#007AFF" android:textColor="#FFFFFF"/>
         </LinearLayout>
         EOF
 
         cat > app/src/main/res/layout/activity_main.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
-        <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-            android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000">
-            <LinearLayout android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="56dp" android:background="#1C1C1E" android:gravity="center_vertical" android:paddingHorizontal="16dp">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="💬 Rose" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold"/>
-            </LinearLayout>
-            <androidx.recyclerview.widget.RecyclerView android:id="@+id/chatRecyclerView" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/toolbar" android:layout_above="@id/bottomBar" android:padding="8dp"/>
-            <LinearLayout android:id="@+id/bottomBar" android:layout_width="match_parent" android:layout_height="64dp" android:layout_alignParentBottom="true" android:background="#1C1C1E" android:gravity="center" android:orientation="horizontal" android:paddingHorizontal="16dp">
-                <Button android:id="@+id/addImageButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:layout_marginEnd="4dp" android:text="📷" android:backgroundTint="#007AFF" android:textColor="#FFFFFF"/>
-                <Button android:id="@+id/addVideoButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:layout_marginHorizontal="2dp" android:text="🎬" android:backgroundTint="#34C759" android:textColor="#FFFFFF"/>
-                <Button android:id="@+id/addFileButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:layout_marginStart="4dp" android:text="📁" android:backgroundTint="#FF9500" android:textColor="#FFFFFF"/>
-            </LinearLayout>
+        <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000">
+        <LinearLayout android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="56dp" android:background="#1C1C1E" android:gravity="center_vertical" android:paddingHorizontal="16dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="💬 Rose" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold"/>
+        </LinearLayout>
+        <androidx.recyclerview.widget.RecyclerView android:id="@+id/chatRecyclerView" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/toolbar" android:layout_above="@id/bottomBar" android:padding="8dp"/>
+        <LinearLayout android:id="@+id/bottomBar" android:layout_width="match_parent" android:layout_height="64dp" android:layout_alignParentBottom="true" android:background="#1C1C1E" android:gravity="center" android:orientation="horizontal" android:paddingHorizontal="16dp">
+        <Button android:id="@+id/addImageButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="📷" android:backgroundTint="#007AFF" android:textColor="#FFFFFF"/>
+        <Button android:id="@+id/addVideoButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="🎬" android:backgroundTint="#34C759" android:textColor="#FFFFFF"/>
+        <Button android:id="@+id/addFileButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="📁" android:backgroundTint="#FF9500" android:textColor="#FFFFFF"/>
+        </LinearLayout>
         </RelativeLayout>
         EOF
 
         cat > app/src/main/res/layout/chat_item.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
-        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:orientation="vertical" android:background="#1C1C1E"
-            android:padding="14dp" android:layout_marginBottom="2dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
-                <ImageView android:id="@+id/typeIcon" android:layout_width="32dp" android:layout_height="32dp" android:src="@android:drawable/ic_menu_gallery" />
-                <TextView android:id="@+id/fileNameText" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:textColor="#FFFFFF" android:textSize="15sp" android:maxLines="1" />
-            </LinearLayout>
-            <TextView android:id="@+id/dateText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="44dp" android:layout_marginTop="4dp" android:textColor="#8E8E93" android:textSize="12sp" />
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="#1C1C1E" android:padding="14dp" android:layout_marginBottom="2dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
+        <ImageView android:id="@+id/typeIcon" android:layout_width="32dp" android:layout_height="32dp" android:src="@android:drawable/ic_menu_gallery"/>
+        <TextView android:id="@+id/fileNameText" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:textColor="#FFFFFF" android:textSize="15sp" android:maxLines="1"/>
+        </LinearLayout>
+        <TextView android:id="@+id/dateText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="44dp" android:layout_marginTop="4dp" android:textColor="#8E8E93" android:textSize="12sp"/>
         </LinearLayout>
         EOF
 
