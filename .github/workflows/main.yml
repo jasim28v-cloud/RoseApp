@@ -11,36 +11,35 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Setup SDK
+    - name: Install SDK
       run: |
-        mkdir -p $HOME/sdk/cmdline-tools
-        cd $HOME/sdk/cmdline-tools
+        export ANDROID_HOME=$HOME/sdk
+        mkdir -p $ANDROID_HOME/cmdline-tools
+        cd $ANDROID_HOME/cmdline-tools
         curl -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o sdk.zip
         unzip -q sdk.zip && mv cmdline-tools latest && rm sdk.zip
-        echo "ANDROID_HOME=$HOME/sdk" >> $GITHUB_ENV
-        echo "$HOME/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        yes | $HOME/sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-        $HOME/sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-    - name: Build Project
+    - name: Create App
       run: |
-        mkdir -p app/src/main/java/com/test
-        mkdir -p app/src/main/res/layout app/src/main/res/values gradle/wrapper
+        mkdir -p app/src/main/java/com/test app/src/main/res/layout app/src/main/res/values gradle/wrapper
 
-        echo 'rootProject.name="Test";include ":app"' > settings.gradle
+        echo 'rootProject.name="TestApp";include ":app"' > settings.gradle
         echo 'plugins{id"com.android.application"version"8.2.2"apply false}' > build.gradle
-        echo 'org.gradle.jvmargs=-Xmx2048m' > gradle.properties
+        echo 'android.useAndroidX=true' > gradle.properties
         echo "sdk.dir=$HOME/sdk" > local.properties
 
         cat > app/build.gradle << 'EOF'
         plugins{id'com.android.application'}
-        android{namespace'com.test';compileSdk 34;defaultConfig{applicationId"com.test";minSdk 24;targetSdk 34;versionCode 1;versionName"1.0"}buildTypes{release{minifyEnabled false}}compileOptions{sourceCompatibility JavaVersion.VERSION_1_8;targetCompatibility JavaVersion.VERSION_1_8}}
+        android{namespace'com.test';compileSdk 34;defaultConfig{applicationId"com.test";minSdk 24;targetSdk 34;versionCode 1;versionName"1.0"}}
         EOF
 
         cat > app/src/main/AndroidManifest.xml << 'EOF'
-        <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-        <application android:label="Test">
+        <application android:label="GitHub Test">
         <activity android:name=".MainActivity" android:exported="true">
         <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity></application></manifest>
@@ -50,24 +49,32 @@ jobs:
         package com.test;
         import android.app.Activity;
         import android.os.Bundle;
+        import android.widget.LinearLayout;
         import android.widget.TextView;
+        import android.graphics.Color;
         public class MainActivity extends Activity {
             protected void onCreate(Bundle b) {
                 super.onCreate(b);
+                LinearLayout l = new LinearLayout(this);
+                l.setBackgroundColor(Color.parseColor("#1a1a2e"));
+                l.setGravity(17);
                 TextView t = new TextView(this);
-                t.setText("Hello from GitHub!");
-                t.setTextSize(30);
-                setContentView(t);
+                t.setText("✅ شغال من GitHub!");
+                t.setTextColor(Color.WHITE);
+                t.setTextSize(28);
+                l.addView(t);
+                setContentView(l);
             }
         }
         EOF
 
-    - name: Build
+    - name: Build APK
       run: |
         gradle wrapper
         ./gradlew assembleDebug --no-daemon
 
-    - uses: actions/upload-artifact@v4
+    - name: Download APK
+      uses: actions/upload-artifact@v4
       with:
         name: Test-APK
         path: app/build/outputs/apk/debug/app-debug.apk
