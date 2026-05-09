@@ -1,0 +1,73 @@
+name: Build APK
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Setup SDK
+      run: |
+        mkdir -p $HOME/sdk/cmdline-tools
+        cd $HOME/sdk/cmdline-tools
+        curl -L https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o sdk.zip
+        unzip -q sdk.zip && mv cmdline-tools latest && rm sdk.zip
+        echo "ANDROID_HOME=$HOME/sdk" >> $GITHUB_ENV
+        echo "$HOME/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        yes | $HOME/sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+        $HOME/sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+    - name: Build Project
+      run: |
+        mkdir -p app/src/main/java/com/test
+        mkdir -p app/src/main/res/layout app/src/main/res/values gradle/wrapper
+
+        echo 'rootProject.name="Test";include ":app"' > settings.gradle
+        echo 'plugins{id"com.android.application"version"8.2.2"apply false}' > build.gradle
+        echo 'org.gradle.jvmargs=-Xmx2048m' > gradle.properties
+        echo "sdk.dir=$HOME/sdk" > local.properties
+
+        cat > app/build.gradle << 'EOF'
+        plugins{id'com.android.application'}
+        android{namespace'com.test';compileSdk 34;defaultConfig{applicationId"com.test";minSdk 24;targetSdk 34;versionCode 1;versionName"1.0"}buildTypes{release{minifyEnabled false}}compileOptions{sourceCompatibility JavaVersion.VERSION_1_8;targetCompatibility JavaVersion.VERSION_1_8}}
+        EOF
+
+        cat > app/src/main/AndroidManifest.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <application android:label="Test">
+        <activity android:name=".MainActivity" android:exported="true">
+        <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+        </activity></application></manifest>
+        EOF
+
+        cat > app/src/main/java/com/test/MainActivity.java << 'EOF'
+        package com.test;
+        import android.app.Activity;
+        import android.os.Bundle;
+        import android.widget.TextView;
+        public class MainActivity extends Activity {
+            protected void onCreate(Bundle b) {
+                super.onCreate(b);
+                TextView t = new TextView(this);
+                t.setText("Hello from GitHub!");
+                t.setTextSize(30);
+                setContentView(t);
+            }
+        }
+        EOF
+
+    - name: Build
+      run: |
+        gradle wrapper
+        ./gradlew assembleDebug --no-daemon
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: Test-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
