@@ -1,4 +1,4 @@
-name: Build Rose APK
+name: Build Game APK
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Setup Android SDK Manually
+    - name: Setup Android SDK
       run: |
         mkdir -p $HOME/android-sdk/cmdline-tools
         cd $HOME/android-sdk/cmdline-tools
@@ -29,49 +29,31 @@ jobs:
         yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
         $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-    - name: Create Project Structure
+    - name: Create Project
       run: |
-        mkdir -p app/src/main/java/com/rose/app
+        mkdir -p app/src/main/java/com/rose/game
         mkdir -p app/src/main/res/layout
-        mkdir -p app/src/main/res/xml
         mkdir -p app/src/main/res/values
         mkdir -p gradle/wrapper
 
     - name: Create settings.gradle
       run: |
         cat > settings.gradle << 'EOF'
-        pluginManagement {
-            repositories {
-                google()
-                mavenCentral()
-                gradlePluginPortal()
-            }
-        }
-        dependencyResolutionManagement {
-            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-            repositories {
-                google()
-                mavenCentral()
-            }
-        }
-        rootProject.name = "RoseApp"
+        rootProject.name = "GameApp"
         include ':app'
         EOF
 
-    - name: Create root build.gradle
+    - name: Create build.gradle
       run: |
         cat > build.gradle << 'EOF'
-        plugins {
-            id 'com.android.application' version '8.2.2' apply false
-        }
+        plugins { id 'com.android.application' version '8.2.2' apply false }
         EOF
 
     - name: Create gradle.properties
       run: |
         cat > gradle.properties << 'EOF'
-        org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+        org.gradle.jvmargs=-Xmx2048m
         android.useAndroidX=true
-        android.enableJetifier=true
         EOF
 
     - name: Create local.properties
@@ -80,34 +62,24 @@ jobs:
     - name: Create app/build.gradle
       run: |
         cat > app/build.gradle << 'EOF'
-        plugins {
-            id 'com.android.application'
-        }
+        plugins { id 'com.android.application' }
         android {
-            namespace 'com.rose.app'
+            namespace 'com.rose.game'
             compileSdk 34
             defaultConfig {
-                applicationId "com.rose.app"
+                applicationId "com.rose.game"
                 minSdk 24
                 targetSdk 34
                 versionCode 1
                 versionName "1.0"
             }
-            buildTypes {
-                release {
-                    minifyEnabled false
-                }
-            }
+            buildTypes { release { minifyEnabled false } }
             compileOptions {
                 sourceCompatibility JavaVersion.VERSION_1_8
                 targetCompatibility JavaVersion.VERSION_1_8
             }
         }
-        dependencies {
-            implementation 'androidx.appcompat:appcompat:1.6.1'
-            implementation 'com.google.android.material:material:1.11.0'
-            implementation 'androidx.recyclerview:recyclerview:1.3.1'
-        }
+        dependencies { implementation 'androidx.appcompat:appcompat:1.6.1' }
         EOF
 
     - name: Create AndroidManifest.xml
@@ -115,292 +87,131 @@ jobs:
         cat > app/src/main/AndroidManifest.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-            <application
-                android:allowBackup="true"
-                android:icon="@mipmap/ic_launcher"
-                android:label="Rose"
-                android:theme="@style/Theme.Rose">
-                <activity android:name=".LockScreenActivity" android:exported="true">
+            <application android:allowBackup="true" android:label="Guess Game" android:theme="@style/Theme.Game">
+                <activity android:name=".MainActivity" android:exported="true">
                     <intent-filter>
-                        <action android:name="android.intent.action.MAIN" />
-                        <category android:name="android.intent.category.LAUNCHER" />
+                        <action android:name="android.intent.action.MAIN"/>
+                        <category android:name="android.intent.category.LAUNCHER"/>
                     </intent-filter>
                 </activity>
-                <activity android:name=".MainActivity" />
-                <provider
-                    android:name="androidx.core.content.FileProvider"
-                    android:authorities="${applicationId}.provider"
-                    android:exported="false"
-                    android:grantUriPermissions="true">
-                    <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
-                </provider>
             </application>
         </manifest>
         EOF
 
-    - name: Create LockScreenActivity.java
-      run: |
-        cat > app/src/main/java/com/rose/app/LockScreenActivity.java << 'EOF'
-        package com.rose.app;
-        import android.content.Intent;
-        import android.os.Bundle;
-        import android.widget.EditText;
-        import android.widget.Toast;
-        import androidx.appcompat.app.AppCompatActivity;
-        public class LockScreenActivity extends AppCompatActivity {
-            @Override
-            protected void onCreate(Bundle savedInstanceState) {
-                super.onCreate(savedInstanceState);
-                setContentView(R.layout.activity_lock_screen);
-                EditText pin = findViewById(R.id.pinEditText);
-                findViewById(R.id.unlockButton).setOnClickListener(v -> {
-                    if (pin.getText().toString().equals("1231")) {
-                        startActivity(new Intent(this, MainActivity.class));
-                        finish();
-                    } else {
-                        Toast.makeText(this, "رمز خاطئ", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
-        }
-        EOF
-
-    - name: Create FileItem.java
-      run: |
-        cat > app/src/main/java/com/rose/app/FileItem.java << 'EOF'
-        package com.rose.app;
-        import java.util.Date;
-        public class FileItem {
-            private final String displayName, filePath;
-            private final Date date;
-            public FileItem(String dn, String fp, Date d) { displayName=dn; filePath=fp; date=d; }
-            public String getDisplayName() { return displayName; }
-            public String getFilePath() { return filePath; }
-            public Date getDate() { return date; }
-        }
-        EOF
-
-    - name: Create CryptoUtils.java
-      run: |
-        cat > app/src/main/java/com/rose/app/CryptoUtils.java << 'EOF'
-        package com.rose.app;
-        import android.content.Context;
-        import android.content.Intent;
-        import android.net.Uri;
-        import android.webkit.MimeTypeMap;
-        import androidx.core.content.FileProvider;
-        import java.io.*;
-        import java.security.SecureRandom;
-        import javax.crypto.*;
-        import javax.crypto.spec.*;
-        public class CryptoUtils {
-            public static void encryptFile(Context ctx, Uri inUri, File outFile, String key) throws Exception {
-                java.security.MessageDigest sha = java.security.MessageDigest.getInstance("SHA-256");
-                SecretKeySpec sk = new SecretKeySpec(sha.digest(key.getBytes("UTF-8")), "AES");
-                byte[] iv = new byte[16]; new SecureRandom().nextBytes(iv);
-                Cipher c = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                c.init(Cipher.ENCRYPT_MODE, sk, new IvParameterSpec(iv));
-                try (InputStream is = ctx.getContentResolver().openInputStream(inUri);
-                     OutputStream os = new FileOutputStream(outFile)) {
-                    os.write(iv);
-                    try (CipherOutputStream cos = new CipherOutputStream(os, c)) {
-                        byte[] buf = new byte[8192]; int len;
-                        while ((len = is.read(buf)) != -1) cos.write(buf, 0, len);
-                    }
-                }
-            }
-            public static void decryptAndOpenFile(Context ctx, File encFile, String key) {
-                try {
-                    File tmpDir = new File(ctx.getCacheDir(), "temp_decrypted"); tmpDir.mkdirs();
-                    File decFile = new File(tmpDir, encFile.getName().replaceFirst("ENC_\\d+_", ""));
-                    java.security.MessageDigest sha = java.security.MessageDigest.getInstance("SHA-256");
-                    SecretKeySpec sk = new SecretKeySpec(sha.digest(key.getBytes("UTF-8")), "AES");
-                    try (FileInputStream fis = new FileInputStream(encFile)) {
-                        byte[] iv = new byte[16]; fis.read(iv);
-                        Cipher c = Cipher.getInstance("AES/CBC/PKCS5Padding");
-                        c.init(Cipher.DECRYPT_MODE, sk, new IvParameterSpec(iv));
-                        try (CipherInputStream cis = new CipherInputStream(fis, c);
-                             FileOutputStream fos = new FileOutputStream(decFile)) {
-                            byte[] buf = new byte[8192]; int len;
-                            while ((len = cis.read(buf)) != -1) fos.write(buf, 0, len);
-                        }
-                    }
-                    Uri uri = FileProvider.getUriForFile(ctx, ctx.getPackageName() + ".provider", decFile);
-                    Intent i = new Intent(Intent.ACTION_VIEW).setDataAndType(uri,
-                        MimeTypeMap.getSingleton().getMimeTypeFromExtension(
-                            MimeTypeMap.getFileExtensionFromUrl(decFile.getName())));
-                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    ctx.startActivity(i);
-                } catch (Exception ignored) {}
-            }
-            public static String getFileName(Context ctx, Uri uri) {
-                String n = "unknown";
-                try (android.database.Cursor c = ctx.getContentResolver().query(uri, null, null, null, null)) {
-                    if (c != null && c.moveToFirst()) {
-                        int i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
-                        if (i >= 0) n = c.getString(i);
-                    }
-                } catch (Exception ignored) {}
-                return n;
-            }
-        }
-        EOF
-
     - name: Create MainActivity.java
       run: |
-        cat > app/src/main/java/com/rose/app/MainActivity.java << 'EOF'
-        package com.rose.app;
-        import android.content.Intent;
-        import android.net.Uri;
+        cat > app/src/main/java/com/rose/game/MainActivity.java << 'EOF'
+        package com.rose.game;
         import android.os.Bundle;
-        import android.os.Environment;
-        import android.view.LayoutInflater;
         import android.view.View;
-        import android.view.ViewGroup;
-        import android.widget.ImageView;
-        import android.widget.TextView;
-        import android.widget.Toast;
-        import androidx.annotation.NonNull;
+        import android.widget.*;
         import androidx.appcompat.app.AppCompatActivity;
-        import androidx.recyclerview.widget.LinearLayoutManager;
-        import androidx.recyclerview.widget.RecyclerView;
-        import java.io.File;
-        import java.text.SimpleDateFormat;
-        import java.util.ArrayList;
-        import java.util.Date;
-        import java.util.List;
-        import java.util.Locale;
+        import java.util.Random;
         public class MainActivity extends AppCompatActivity {
-            private RecyclerView rv;
-            private ChatAdapter adapter;
-            private List<FileItem> list = new ArrayList<>();
+            int target, attempts = 0;
+            TextView title, hint, attemptsText;
+            EditText input;
+            Button guessBtn, newGameBtn;
             @Override
-            protected void onCreate(Bundle savedInstanceState) {
-                super.onCreate(savedInstanceState);
+            protected void onCreate(Bundle b) {
+                super.onCreate(b);
                 setContentView(R.layout.activity_main);
-                rv = findViewById(R.id.chatRecyclerView);
-                rv.setLayoutManager(new LinearLayoutManager(this));
-                adapter = new ChatAdapter();
-                rv.setAdapter(adapter);
-                findViewById(R.id.addImageButton).setOnClickListener(v -> open("image/*"));
-                findViewById(R.id.addVideoButton).setOnClickListener(v -> open("video/*"));
-                findViewById(R.id.addFileButton).setOnClickListener(v -> open("*/*"));
-                loadFiles();
+                title = findViewById(R.id.title);
+                hint = findViewById(R.id.hint);
+                attemptsText = findViewById(R.id.attempts);
+                input = findViewById(R.id.input);
+                guessBtn = findViewById(R.id.guessBtn);
+                newGameBtn = findViewById(R.id.newGameBtn);
+                newGame();
+                guessBtn.setOnClickListener(v -> checkGuess());
+                newGameBtn.setOnClickListener(v -> newGame());
             }
-            private void open(String type) {
-                Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-                i.setType(type); i.addCategory(Intent.CATEGORY_OPENABLE);
-                startActivityForResult(Intent.createChooser(i, "اختر ملف"), 100);
+            void newGame() {
+                target = new Random().nextInt(100) + 1;
+                attempts = 0;
+                hint.setText("🤔 خمن رقم بين 1 و 100");
+                attemptsText.setText("المحاولات: 0");
+                input.setText("");
+                input.setEnabled(true);
+                guessBtn.setEnabled(true);
+                title.setText("🎮 لعبة التخمين");
             }
-            @Override
-            protected void onActivityResult(int req, int res, Intent data) {
-                super.onActivityResult(req, res, data);
-                if (req == 100 && res == RESULT_OK && data != null && data.getData() != null) save(data.getData());
-            }
-            private void save(Uri uri) {
-                try {
-                    File dir = new File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "Rose_Encrypted");
-                    dir.mkdirs();
-                    String name = CryptoUtils.getFileName(this, uri);
-                    String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
-                    File f = new File(dir, "ENC_" + ts + "_" + name);
-                    CryptoUtils.encryptFile(this, uri, f, "MySecretKey12345");
-                    list.add(0, new FileItem(name, f.getAbsolutePath(), new Date()));
-                    adapter.notifyItemInserted(0);
-                    rv.scrollToPosition(0);
-                    Toast.makeText(this, "تم ✓", Toast.LENGTH_SHORT).show();
-                } catch (Exception e) {
-                    Toast.makeText(this, "خطأ", Toast.LENGTH_SHORT).show();
+            void checkGuess() {
+                String s = input.getText().toString();
+                if (s.isEmpty()) { Toast.makeText(this, "اكتب رقم!", Toast.LENGTH_SHORT).show(); return; }
+                int g = Integer.parseInt(s);
+                attempts++;
+                attemptsText.setText("المحاولات: " + attempts);
+                if (g < target) hint.setText("📈 أكبر! الرقم أكبر من " + g);
+                else if (g > target) hint.setText("📉 أصغر! الرقم أصغر من " + g);
+                else {
+                    hint.setText("🎉 صح! الرقم هو " + target);
+                    title.setText("🏆 فزت في " + attempts + " محاولة!");
+                    input.setEnabled(false);
+                    guessBtn.setEnabled(false);
+                    Toast.makeText(this, "مبروك!", Toast.LENGTH_LONG).show();
                 }
-            }
-            private void loadFiles() {
-                File dir = new File(getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS), "Rose_Encrypted");
-                if (dir.exists()) {
-                    File[] fs = dir.listFiles();
-                    if (fs != null) for (File f : fs)
-                        list.add(new FileItem(f.getName().replaceFirst("ENC_\\d+_", ""), f.getAbsolutePath(), new Date(f.lastModified())));
-                }
-                adapter.notifyDataSetChanged();
-            }
-            class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.VH> {
-                @NonNull @Override
-                public VH onCreateViewHolder(@NonNull ViewGroup p, int t) {
-                    return new VH(LayoutInflater.from(p.getContext()).inflate(R.layout.chat_item, p, false));
-                }
-                @Override
-                public void onBindViewHolder(@NonNull VH h, int pos) {
-                    FileItem item = list.get(pos);
-                    h.name.setText(item.getDisplayName());
-                    h.date.setText(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(item.getDate()));
-                    String n = item.getDisplayName().toLowerCase();
-                    if (n.matches(".*\\.(jpg|jpeg|png|gif)$")) h.icon.setImageResource(android.R.drawable.ic_menu_gallery);
-                    else if (n.matches(".*\\.(mp4|avi|mkv|mov)$")) h.icon.setImageResource(android.R.drawable.ic_media_play);
-                    else h.icon.setImageResource(android.R.drawable.ic_menu_save);
-                    h.itemView.setOnClickListener(v -> CryptoUtils.decryptAndOpenFile(MainActivity.this, new File(item.getFilePath()), "MySecretKey12345"));
-                }
-                @Override public int getItemCount() { return list.size(); }
-                class VH extends RecyclerView.ViewHolder {
-                    ImageView icon; TextView name, date;
-                    VH(View v) { super(v); icon = v.findViewById(R.id.typeIcon); name = v.findViewById(R.id.fileNameText); date = v.findViewById(R.id.dateText); }
-                }
+                input.setText("");
             }
         }
         EOF
 
-    - name: Create XML Layouts
+    - name: Create Layout
       run: |
-        cat > app/src/main/res/layout/activity_lock_screen.xml << 'EOF'
-        <?xml version="1.0" encoding="utf-8"?>
-        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:gravity="center" android:orientation="vertical" android:background="#1C1C1E">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🌹" android:textSize="64sp"/>
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Rose" android:textColor="#FFFFFF" android:textSize="28sp" android:textStyle="bold"/>
-        <EditText android:id="@+id/pinEditText" android:layout_width="200dp" android:layout_height="wrap_content" android:layout_marginTop="40dp" android:inputType="numberPassword" android:textColor="#FFFFFF" android:hint="PIN" android:maxLength="4" android:gravity="center"/>
-        <Button android:id="@+id/unlockButton" android:layout_width="200dp" android:layout_height="48dp" android:layout_marginTop="20dp" android:text="فتح" android:backgroundTint="#007AFF" android:textColor="#FFFFFF"/>
-        </LinearLayout>
-        EOF
-
         cat > app/src/main/res/layout/activity_main.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
-        <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000">
-        <LinearLayout android:id="@+id/toolbar" android:layout_width="match_parent" android:layout_height="56dp" android:background="#1C1C1E" android:gravity="center_vertical" android:paddingHorizontal="16dp">
-        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="💬 Rose" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold"/>
+        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:layout_width="match_parent" android:layout_height="match_parent"
+            android:orientation="vertical" android:gravity="center"
+            android:padding="32dp" android:background="#1a1a2e">
+            <TextView android:id="@+id/title" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="🎮 لعبة التخمين"
+                android:textSize="28sp" android:textColor="#e94560" android:textStyle="bold"
+                android:layout_marginBottom="40dp"/>
+            <TextView android:id="@+id/hint" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="🤔 خمن رقم بين 1 و 100"
+                android:textSize="20sp" android:textColor="#FFFFFF"
+                android:layout_marginBottom="30dp" android:gravity="center"/>
+            <EditText android:id="@+id/input" android:layout_width="200dp"
+                android:layout_height="56dp" android:inputType="number"
+                android:textColor="#FFFFFF" android:textColorHint="#888"
+                android:hint="أدخل رقم" android:textSize="22sp" android:gravity="center"
+                android:background="@drawable/input_bg" android:layout_marginBottom="20dp"/>
+            <Button android:id="@+id/guessBtn" android:layout_width="200dp"
+                android:layout_height="52dp" android:text="🎯 خمن"
+                android:textSize="18sp" android:textColor="#FFFFFF"
+                android:backgroundTint="#e94560" android:layout_marginBottom="12dp"/>
+            <TextView android:id="@+id/attempts" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="المحاولات: 0"
+                android:textSize="16sp" android:textColor="#aaa"
+                android:layout_marginBottom="24dp"/>
+            <Button android:id="@+id/newGameBtn" android:layout_width="160dp"
+                android:layout_height="44dp" android:text="🔄 لعبة جديدة"
+                android:textSize="14sp" android:textColor="#FFFFFF"
+                android:backgroundTint="#0f3460"/>
         </LinearLayout>
-        <androidx.recyclerview.widget.RecyclerView android:id="@+id/chatRecyclerView" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_below="@id/toolbar" android:layout_above="@id/bottomBar" android:padding="8dp"/>
-        <LinearLayout android:id="@+id/bottomBar" android:layout_width="match_parent" android:layout_height="64dp" android:layout_alignParentBottom="true" android:background="#1C1C1E" android:gravity="center" android:orientation="horizontal" android:paddingHorizontal="16dp">
-        <Button android:id="@+id/addImageButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="📷" android:backgroundTint="#007AFF" android:textColor="#FFFFFF"/>
-        <Button android:id="@+id/addVideoButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="🎬" android:backgroundTint="#34C759" android:textColor="#FFFFFF"/>
-        <Button android:id="@+id/addFileButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="📁" android:backgroundTint="#FF9500" android:textColor="#FFFFFF"/>
-        </LinearLayout>
-        </RelativeLayout>
         EOF
 
-        cat > app/src/main/res/layout/chat_item.xml << 'EOF'
-        <?xml version="1.0" encoding="utf-8"?>
-        <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="#1C1C1E" android:padding="14dp" android:layout_marginBottom="2dp">
-        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
-        <ImageView android:id="@+id/typeIcon" android:layout_width="32dp" android:layout_height="32dp" android:src="@android:drawable/ic_menu_gallery"/>
-        <TextView android:id="@+id/fileNameText" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:textColor="#FFFFFF" android:textSize="15sp" android:maxLines="1"/>
-        </LinearLayout>
-        <TextView android:id="@+id/dateText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="44dp" android:layout_marginTop="4dp" android:textColor="#8E8E93" android:textSize="12sp"/>
-        </LinearLayout>
-        EOF
-
-    - name: Create Resource Files
+    - name: Create Drawable
       run: |
-        cat > app/src/main/res/xml/file_paths.xml << 'EOF'
+        mkdir -p app/src/main/res/drawable
+        cat > app/src/main/res/drawable/input_bg.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
-        <paths><cache-path name="decrypted_files" path="temp_decrypted/" /></paths>
+        <shape xmlns:android="http://schemas.android.com/apk/res/android">
+            <solid android:color="#16213e"/>
+            <stroke android:width="2dp" android:color="#e94560"/>
+            <corners android:radius="12dp"/>
+        </shape>
         EOF
 
+    - name: Create Theme
+      run: |
         cat > app/src/main/res/values/themes.xml << 'EOF'
         <?xml version="1.0" encoding="utf-8"?>
         <resources>
-            <style name="Theme.Rose" parent="Theme.AppCompat.Light.NoActionBar">
-                <item name="colorPrimary">#FF007AFF</item>
-                <item name="android:statusBarColor">#FF1C1C1E</item>
-                <item name="android:windowBackground">#FF000000</item>
+            <style name="Theme.Game" parent="Theme.AppCompat.Light.NoActionBar">
+                <item name="android:statusBarColor">#1a1a2e</item>
+                <item name="android:windowBackground">#1a1a2e</item>
             </style>
         </resources>
         EOF
@@ -414,6 +225,6 @@ jobs:
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
-        name: Rose-APK
+        name: Game-APK
         path: app/build/outputs/apk/debug/app-debug.apk
         retention-days: 90
